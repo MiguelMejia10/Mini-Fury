@@ -13,6 +13,7 @@ import uuid
 ROOT = Path(__file__).resolve().parents[1]
 DOCKER = ['docker', 'compose', 'exec', '-T', 'postgres']
 TABLES = ['schema_migrations', 'users', 'applications', 'audit_events']
+COLLABORATION_TABLES = ['teams', 'team_members', 'team_invitations', 'application_dependencies', 'platform_alerts']
 def command(args, **kwargs):
     return subprocess.run(DOCKER + args, cwd=ROOT, check=True, **kwargs)
 def sql(database, text):
@@ -59,6 +60,8 @@ def restore(path, target=None, keep=False):
         counts = {table: int(sql(database, 'SELECT count(*) FROM ' + table)) for table in TABLES}
         if counts['schema_migrations'] < 2:
             raise ValueError('El esquema restaurado no corresponde al proyecto.')
+        if sql(database, "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='004_teams_quality_operations.sql')") == 't':
+            counts.update({table: int(sql(database, 'SELECT count(*) FROM ' + table)) for table in COLLABORATION_TABLES})
         # Restoring a backup must not revive previously revoked login sessions.
         sql(database, 'DELETE FROM sessions; DELETE FROM auth_attempts;')
         print(json.dumps({'database': database, 'verified': True, 'rows': counts, 'sessionsRevoked': True}, ensure_ascii=False))

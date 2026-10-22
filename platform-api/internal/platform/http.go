@@ -8,14 +8,18 @@ import (
 	"log/slog"
 	"mime"
 	"mini-operador-ti/platform-api/internal/identity"
+	"mini-operador-ti/platform-api/internal/teams"
+	"mini-operador-ti/platform-api/internal/telemetry"
 	"net/http"
 	"time"
 )
 
 type API struct {
-	Store Store
-	Log   *slog.Logger
-	Auth  *identity.HTTP
+	Store      Store
+	Log        *slog.Logger
+	Auth       *identity.HTTP
+	Teams      *teams.HTTP
+	Operations *telemetry.HTTP
 }
 type apiError struct {
 	Code    string            `json:"code,omitempty"`
@@ -50,6 +54,12 @@ func (a *API) Handler() http.Handler {
 	mux.Handle("POST /api/applications/{id}/restore", protected(a.restore))
 	if a.Auth != nil {
 		a.Auth.Routes(mux)
+	}
+	if a.Teams != nil {
+		a.Teams.Routes(mux)
+	}
+	if a.Operations != nil {
+		a.Operations.Routes(mux)
 	}
 	slots := make(chan struct{}, 64)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { fail(w, http.StatusNotFound, "Ruta no encontrada.") })
@@ -117,7 +127,7 @@ func (a *API) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, 16*1024)
+	r.Body = http.MaxBytesReader(w, r.Body, 128*1024)
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	var in CreateApplication
@@ -139,7 +149,7 @@ func (a *API) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		a.internal(w, err)
+		a.operationError(w, err)
 		return
 	}
 	w.Header().Set("Location", "/api/applications/"+app.ID)
@@ -165,6 +175,10 @@ func (a *API) get(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) operationError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, ErrPermission):
+		fail(w, 403, "Tu rol no permite modificar esta aplicación o su equipo.")
+	case errors.Is(err, ErrDependencies):
+		fail(w, 422, "Dependencias inválidas, inaccesibles o con ciclos.")
 	case errors.Is(err, ErrNotFound):
 		fail(w, 404, "Aplicación no encontrada.")
 	case errors.Is(err, ErrStale):
@@ -185,7 +199,7 @@ func applicationJSON(w http.ResponseWriter, r *http.Request, target any) bool {
 		fail(w, 415, "Usa Content-Type: application/json.")
 		return false
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, 16*1024)
+	r.Body = http.MaxBytesReader(w, r.Body, 128*1024)
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	if dec.Decode(target) != nil || dec.Decode(new(any)) != io.EOF {

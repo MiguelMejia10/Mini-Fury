@@ -72,6 +72,9 @@ func (p *Postgres) SetActive(ctx context.Context, actor User, id string, active 
 	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(748220)`); err != nil {
 		return User{}, err
 	}
+	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(748221)`); err != nil {
+		return User{}, err
+	}
 	var authorized bool
 	if err = tx.QueryRowContext(ctx, `SELECT active AND role='admin' FROM users WHERE id=$1 FOR SHARE`, actor.ID).Scan(&authorized); err != nil {
 		return User{}, err
@@ -86,6 +89,16 @@ func (p *Postgres) SetActive(ctx context.Context, actor User, id string, active 
 	}
 	if err != nil {
 		return User{}, err
+	}
+	if !active {
+		var orphan bool
+		err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM team_members m WHERE m.user_id=$1 AND m.role='admin' AND NOT EXISTS(SELECT 1 FROM team_members other JOIN users u ON u.id=other.user_id WHERE other.team_id=m.team_id AND other.user_id<>$1 AND other.role='admin' AND u.active))`, id).Scan(&orphan)
+		if err != nil {
+			return User{}, err
+		}
+		if orphan {
+			return User{}, ErrAccountConflict
+		}
 	}
 	if target.Active == active {
 		return target, nil

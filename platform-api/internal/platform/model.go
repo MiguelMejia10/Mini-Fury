@@ -17,20 +17,29 @@ var namePattern = regexp.MustCompile(`^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`)
 var idPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 type CreateApplication struct {
-	Description string   `json:"description"`
-	Tags        []string `json:"tags"`
-	Name        string   `json:"name"`
-	Repository  string   `json:"repository"`
-	Port        int      `json:"port"`
-	Environment string   `json:"environment"`
-	Owner       string   `json:"owner"`
-	Runtime     string   `json:"runtime"`
+	TeamID          *string  `json:"teamId"`
+	Documentation   string   `json:"documentation"`
+	Links           []Link   `json:"links"`
+	HealthCheckPath string   `json:"healthCheckPath"`
+	DependencyIDs   []string `json:"dependencyIds,omitempty"`
+	Description     string   `json:"description"`
+	Tags            []string `json:"tags"`
+	Name            string   `json:"name"`
+	Repository      string   `json:"repository"`
+	Port            int      `json:"port"`
+	Environment     string   `json:"environment"`
+	Owner           string   `json:"owner"`
+	Runtime         string   `json:"runtime"`
 }
 type Application struct {
-	Version    int64      `json:"version"`
-	UpdatedAt  time.Time  `json:"updatedAt"`
-	ArchivedAt *time.Time `json:"archivedAt"`
-	ID         string     `json:"id"`
+	Dependencies  []Dependency `json:"dependencies"`
+	CanEdit       bool         `json:"canEdit"`
+	CanManageTeam bool         `json:"canManageTeam"`
+	Readiness     Readiness    `json:"readiness"`
+	Version       int64        `json:"version"`
+	UpdatedAt     time.Time    `json:"updatedAt"`
+	ArchivedAt    *time.Time   `json:"archivedAt"`
+	ID            string       `json:"id"`
 	CreateApplication
 	Status    string    `json:"status"`
 	CreatedBy *string   `json:"createdBy"`
@@ -54,6 +63,7 @@ func (a *CreateApplication) Validate() map[string]string {
 		a.Runtime = "Contenedor HTTP"
 	}
 	fields := map[string]string{}
+	a.qualityValidate(fields)
 	a.Description = strings.TrimSpace(a.Description)
 	if utf8.RuneCountInString(a.Description) > 2000 || strings.ContainsRune(a.Description, 0) {
 		fields["description"] = "Máximo 2000 caracteres."

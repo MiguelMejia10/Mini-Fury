@@ -65,7 +65,7 @@ func TestCreateValidationAndConflicts(t *testing.T) {
 		{"multiple JSON", validBody + ` {}`, nil, 400, 0},
 		{"unknown field", strings.TrimSuffix(validBody, "}") + `,"admin":true}`, nil, 400, 0},
 		{"malformed", "{", nil, 400, 0},
-		{"oversized", strings.Replace(validBody, "Platform Team", strings.Repeat("x", 17000), 1), nil, 400, 0},
+		{"oversized", strings.Replace(validBody, "Platform Team", strings.Repeat("x", 140000), 1), nil, 400, 0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

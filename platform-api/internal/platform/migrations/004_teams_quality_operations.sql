@@ -1,0 +1,15 @@
+CREATE TABLE teams(id UUID PRIMARY KEY DEFAULT gen_random_uuid(), name VARCHAR(80) NOT NULL, description VARCHAR(500) NOT NULL DEFAULT '', created_by UUID NOT NULL REFERENCES users(id), created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE TABLE team_members(team_id UUID REFERENCES teams(id) ON DELETE CASCADE,user_id UUID REFERENCES users(id) ON DELETE CASCADE,role TEXT NOT NULL CHECK(role IN ('admin','editor','reader')),PRIMARY KEY(team_id,user_id));
+CREATE INDEX team_members_user_idx ON team_members(user_id,team_id);
+CREATE TABLE team_invitations(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,email VARCHAR(254) NOT NULL,role TEXT NOT NULL CHECK(role IN ('admin','editor','reader')),invited_by UUID NOT NULL REFERENCES users(id),expires_at TIMESTAMPTZ NOT NULL DEFAULT now()+interval '7 days',accepted_at TIMESTAMPTZ,revoked_at TIMESTAMPTZ,created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE UNIQUE INDEX team_invite_pending_idx ON team_invitations(team_id,email) WHERE accepted_at IS NULL AND revoked_at IS NULL;
+CREATE INDEX team_invite_email_idx ON team_invitations(email,expires_at);
+ALTER TABLE applications ADD COLUMN team_id UUID REFERENCES teams(id);
+ALTER TABLE applications ADD COLUMN documentation TEXT NOT NULL DEFAULT '' CHECK(length(documentation)<=20000);
+ALTER TABLE applications ADD COLUMN links JSONB NOT NULL DEFAULT '[]' CHECK(jsonb_typeof(links)='array' AND jsonb_array_length(links)<=10);
+ALTER TABLE applications ADD COLUMN health_check_path VARCHAR(200) NOT NULL DEFAULT '';
+CREATE INDEX applications_team_idx ON applications(team_id,created_at DESC,id);
+CREATE TABLE application_dependencies(application_id UUID REFERENCES applications(id) ON DELETE CASCADE,depends_on UUID REFERENCES applications(id) ON DELETE CASCADE,PRIMARY KEY(application_id,depends_on),CHECK(application_id<>depends_on));
+CREATE INDEX dependencies_reverse_idx ON application_dependencies(depends_on,application_id);
+CREATE TABLE platform_alerts(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),instance TEXT NOT NULL,rule TEXT NOT NULL,severity TEXT NOT NULL,message TEXT NOT NULL,active BOOLEAN NOT NULL,acknowledged_by UUID REFERENCES users(id),acknowledged_at TIMESTAMPTZ,first_seen TIMESTAMPTZ NOT NULL DEFAULT now(),updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),occurrences INTEGER NOT NULL DEFAULT 1,UNIQUE(instance,rule));
+CREATE INDEX platform_alerts_updated_idx ON platform_alerts(updated_at DESC,id);

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"log/slog"
 	"mini-operador-ti/platform-api/internal/identity"
+	"mini-operador-ti/platform-api/internal/teams"
+	"mini-operador-ti/platform-api/internal/telemetry"
 	"net/http"
 	"os"
 	"os/signal"
@@ -92,8 +94,15 @@ func run(logger *slog.Logger) error {
 			}
 		}
 	}()
-	api := &platform.API{Store: &platform.PostgresStore{DB: db}, Log: logger, Auth: auth}
-	server := &http.Server{Addr: addr, Handler: api.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 * 1024}
+	metrics := telemetry.New()
+	instance := os.Getenv("INSTANCE_ID")
+	if instance == "" {
+		instance, _ = os.Hostname()
+	}
+	ops := &telemetry.HTTP{DB: db, Metrics: metrics, Instance: instance, Auth: auth}
+	go ops.Run(root, func(e error) { logger.Error("alert_evaluation_failed", "error", e) })
+	api := &platform.API{Store: &platform.PostgresStore{DB: db}, Log: logger, Auth: auth, Teams: &teams.HTTP{Repo: &teams.Postgres{DB: db}, Auth: auth}, Operations: ops}
+	server := &http.Server{Addr: addr, Handler: metrics.Wrap(api.Handler()), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 * 1024}
 	done := make(chan error, 1)
 	go func() { logger.Info("server_started", "address", addr); done <- server.ListenAndServe() }()
 	select {

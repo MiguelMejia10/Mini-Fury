@@ -6,7 +6,7 @@ Permitir completar este flujo con servicios reales:
 
 **Registrar una aplicación → desplegarla → consultar su estado y logs → recuperar una versión anterior si falla.**
 
-Actualmente tenemos la interfaz y el catálogo de aplicaciones conectado a una API Go con persistencia PostgreSQL. Las demás vistas usan datos de demostración. Este checklist registra el alcance necesario para alcanzar un producto mínimo viable.
+Actualmente tenemos la interfaz y el catálogo de aplicaciones conectado a una API Go con persistencia PostgreSQL. Equipos y operación de Mini Fury también usan datos reales; infraestructura y despliegues conservan demostraciones. Este checklist registra el alcance necesario para alcanzar un producto mínimo viable.
 
 ## 1. Definir el alcance
 
@@ -167,3 +167,27 @@ Los despliegues reales de aplicaciones se mantienen aplazados por decisión del 
 - [x] Validación sintáctica de YAML de GitHub/GitLab y pruebas de seguridad de respaldo.
 - [x] Respaldo previo y posterior a la migración; ambos restaurados y consultados en bases aisladas.
 - [ ] Revisión visual de pantallas autenticadas: aplazada por solicitud del usuario.
+
+## Avance v0.4: equipos, calidad y operación
+
+- [x] Crear equipos y consultar miembros con paginación.
+- [x] Roles por equipo: administrador, editor y lector, aplicados en backend.
+- [x] Invitaciones dentro de Mini Fury, aceptación por correo de la sesión, expiración y revocación.
+- [x] Compartir aplicaciones por equipo y revocar acceso al retirar miembros.
+- [x] Conservar aplicaciones personales y proteger al último administrador activo, incluso con solicitudes concurrentes.
+- [x] Documentación de texto, enlaces HTTPS y ruta de salud declarada por aplicación.
+- [x] Dependencias autorizadas, sin ciclos ni referencias a sí misma.
+- [x] Checklist y puntuación derivados de metadatos reales.
+- [x] Métricas reales por instancia: tráfico, errores, latencia estimada, memoria, goroutines y conexiones PostgreSQL.
+- [x] Alertas persistentes por errores y latencia, con reconocimiento auditado, recuperación y recurrencia.
+- [x] Identificar señales sin actualización para no mostrarlas como recuperadas.
+- [x] Exportación Prometheus con sesión de administrador.
+- [x] Pruebas PostgreSQL aisladas, detector de carreras y carga local de hasta 25 usuarios virtuales.
+- [x] Incluir tablas nuevas en la verificación de restauración, conservando compatibilidad con respaldos anteriores.
+- [ ] Revisar visualmente pantallas autenticadas con la cuenta del usuario (aplazado previamente).
+- [ ] Medir capacidad con un catálogo, escritura y tráfico representativos de producción.
+- [ ] Configurar notificaciones externas de alertas y recolección centralizada entre instancias.
+- [ ] Configurar identidad de servicio para scraping externo de Prometheus.
+- [ ] Enviar invitaciones por correo mediante un proveedor configurado.
+
+La preparación del catálogo mide completitud documental, no disponibilidad. El monitoreo de aplicaciones desplegadas, sus logs, CPU y réplicas continúa pendiente junto con Kubernetes/ArgoCD. Detalles y validación en `docs/operacion-v0.4.md` y `docs/validacion-v0.4.md`.

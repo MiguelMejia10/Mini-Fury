@@ -69,7 +69,7 @@ func (h *HTTP) setActive(w http.ResponseWriter, r *http.Request) {
 	user, err := h.Service.Repo.SetActive(r.Context(), actor, id, *in.Active)
 	switch {
 	case errors.Is(err, ErrAccountConflict):
-		problem(w, 409, "No puedes desactivar tu cuenta ni al último administrador activo.")
+		problem(w, 409, "No puedes desactivar tu cuenta ni al último administrador activo de la plataforma o un equipo.")
 		return
 	case errors.Is(err, ErrForbidden):
 		problem(w, 403, "Operación no permitida.")

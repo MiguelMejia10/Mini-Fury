@@ -40,16 +40,78 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+  postgres-test:
+    profiles: [test]
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: mini_fury
+      POSTGRES_DB: mini_fury_test
+      POSTGRES_PASSWORD: disposable_test_only
+    tmpfs: [/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mini_fury -d mini_fury_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
   test:
     profiles: [test]
     build:
       context: ./platform-api
       target: build
     environment:
-      TEST_DATABASE_URL: postgres://mini_fury:${POSTGRES_PASSWORD}@postgres:5432/mini_fury?sslmode=disable
+      TEST_DATABASE_URL: postgres://mini_fury:disposable_test_only@postgres-test:5432/mini_fury_test?sslmode=disable
     command: ["go", "test", "-count=1", "-v", "./..."]
     depends_on:
-      postgres:
+      postgres-test:
         condition: service_healthy
+  postgres-perf:
+    profiles: [perf]
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: mini_fury
+      POSTGRES_DB: mini_fury_perf
+      POSTGRES_PASSWORD: disposable_perf_only
+    tmpfs: [/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mini_fury -d mini_fury_perf"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  perf-bootstrap:
+    profiles: [perf]
+    build: ./platform-api
+    entrypoint: ["platform-user"]
+    environment:
+      DATABASE_URL: postgres://mini_fury:disposable_perf_only@postgres-perf:5432/mini_fury_perf?sslmode=disable
+      ADMIN_EMAIL: load@mini-fury.local
+      ADMIN_NAME: Load test fixture
+      ADMIN_PASSWORD: Disposable-Load-Only-2026!
+    depends_on:
+      postgres-perf:
+        condition: service_healthy
+  perf-api:
+    profiles: [perf]
+    build: ./platform-api
+    environment:
+      DATABASE_URL: postgres://mini_fury:disposable_perf_only@postgres-perf:5432/mini_fury_perf?sslmode=disable
+      HTTP_ADDR: 0.0.0.0:8080
+      ALLOWED_ORIGINS: http://perf.local
+      COOKIE_SECURE: 'false'
+      INSTANCE_ID: perf
+    depends_on:
+      postgres-perf:
+        condition: service_healthy
+  load:
+    profiles: [perf]
+    image: grafana/k6:1.3.0
+    volumes:
+      - ./perf:/scripts:ro
+      - ./.local/perf:/results
+    user: "0:0"
+    command: ["run", "/scripts/catalog.js"]
+    depends_on:
+      perf-api:
+        condition: service_started
+
 volumes:
   postgres_data:

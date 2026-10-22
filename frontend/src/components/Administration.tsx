@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { request } from '../services/http';
 import { useAuth, type User } from './Auth';
 interface AuditEvent { id:number;actorEmail:string;action:string;resourceId:string;createdAt:string }
-const actions=['auth.login','auth.logout','auth.logout_all','auth.password_change','user.bootstrap','user.create','user.deactivate','user.activate','application.create','application.update','application.archive','application.restore'];
+const actions=['auth.login','auth.logout','auth.logout_all','auth.password_change','user.bootstrap','user.create','user.deactivate','user.activate','application.create','application.update','application.archive','application.restore','team.create','team.invite','team.accept','team.invite_revoke','team.member_role','team.member_remove','operations.alert_ack'];
 const blankFilters={actor:'',action:'',resource:'',from:'',until:''};
 export function Administration(){
  const {user:currentUser}=useAuth();const [tab,setTab]=useState<'users'|'audit'>('users');const [offset,setOffset]=useState(0);const [users,setUsers]=useState<User[]>([]);const [events,setEvents]=useState<AuditEvent[]>([]);const [loading,setLoading]=useState(true);const [more,setMore]=useState(false);const [error,setError]=useState('');const [notice,setNotice]=useState('');const [revision,setRevision]=useState(0);const [saving,setSaving]=useState(false);const [target,setTarget]=useState<User|null>(null);const flight=useRef(false);const [filters,setFilters]=useState(blankFilters);

@@ -1,6 +1,6 @@
 # mini-operador-TI / Mini Fury
 
-Internal Developer Platform con interfaz React + TypeScript y API en Go. El catálogo permite registrar, listar y consultar aplicaciones reales persistidas en PostgreSQL, con sesión, roles y auditoría. El resto de pantallas conserva datos de demostración.
+Internal Developer Platform con interfaz React + TypeScript y API en Go. El catálogo permite registrar, listar y consultar aplicaciones reales persistidas en PostgreSQL, con sesión, roles y auditoría. Incluye equipos, documentación y dependencias del catálogo, y operación real de Mini Fury. Infraestructura y despliegues siguen usando demostraciones.
 
 ## Ejecutar en desarrollo local
 
@@ -45,7 +45,7 @@ docker compose --profile setup run --rm --build user-bootstrap
 
 El comando solo crea al primer administrador si la tabla de usuarios está vacía. Si ya hay usuarios, no cambia credenciales ni crea nuevas cuentas. En el entorno implementado se generó una contraseña aleatoria en `.local/bootstrap.env`; abre ese archivo localmente para entrar.
 
-Entra desde la pantalla de login. En **Configuración** puedes cerrar sesión; el administrador además puede crear usuarios y consultar auditoría. Un desarrollador solo ve las aplicaciones registradas por su usuario. Los registros anteriores al control de acceso quedan visibles únicamente para administradores.
+Entra desde la pantalla de login. En **Configuración** puedes cerrar sesión; el administrador además puede crear usuarios y consultar auditoría. Un desarrollador ve sus aplicaciones personales y las compartidas con sus equipos; los permisos de escritura dependen del rol en el equipo. Los registros anteriores al control de acceso quedan visibles únicamente para administradores.
 
 La creación de usuarios requiere al menos 12 caracteres y un máximo de 128 bytes en la contraseña. El cambio de contraseña propia está en Configuración. La recuperación por correo y MFA siguen pendientes.
 
@@ -106,7 +106,7 @@ Desde la raíz, con PostgreSQL en marcha:
 docker compose --profile test run --rm --build test
 ```
 
-Las pruebas verifican validación HTTP, duplicados, errores sin exposición de detalles internos, migraciones repetibles, inserciones concurrentes, separación por ambiente y lectura desde otra conexión. La prueba PostgreSQL crea y elimina exclusivamente sus propios registros `integration-*`.
+Las pruebas verifican validación HTTP, duplicados, errores sin exposición de detalles internos, migraciones repetibles, inserciones concurrentes, separación por ambiente y lectura desde otra conexión. El perfil de pruebas usa `postgres-test`, una base desechable independiente de la base principal.
 
 Con Go 1.25+ instalado también puedes ejecutar `go test ./...` y `go vet ./...` dentro de `platform-api`; la prueba de integración requiere `TEST_DATABASE_URL` y se omite si no está configurada.
 
@@ -117,12 +117,14 @@ Con Go 1.25+ instalado también puedes ejecutar `go test ./...` y `go vet ./...`
 - `frontend/src/services/applications.ts`: cliente HTTP.
 - `frontend/src/services/demo.ts`: datos ilustrativos de las otras vistas.
 - `platform-api/cmd/server`: arranque, conexión y cierre ordenado.
-- `platform-api/internal/platform`: HTTP, validaciones, repositorio y migraciones.
+- `platform-api/internal/platform`: HTTP, catálogo, dependencias, repositorio y migraciones.
+- `platform-api/internal/teams`: equipos, permisos e invitaciones.
+- `platform-api/internal/telemetry`: métricas, estado operacional y alertas.
 - `docker-compose.yml`: PostgreSQL, API y perfil de pruebas.
 - `readme-Interfaz.md`: guía visual.
 - `readmeImplementacion.md`: checklist del MVP y avances.
 
-Pendiente: recuperación de contraseña por correo, MFA/SSO, pruebas de carga representativas, CI/CD de aplicaciones, despliegues, secretos e integraciones con Kubernetes, GitLab, ArgoCD y observabilidad. El registro no construye imágenes ni crea infraestructura.
+Pendiente: recuperación de contraseña por correo, MFA/SSO, validar capacidad con tráfico representativo de producción, CI/CD de aplicaciones, despliegues, secretos e integraciones con Kubernetes, GitLab, ArgoCD y observabilidad. El registro no construye imágenes ni crea infraestructura.
 
 ## Arquitectura y capacidad
 
@@ -141,3 +143,19 @@ python3 scripts/database.py verify .local/backups/ARCHIVO.dump
 ```
 
 La CI está configurada en archivos y pendiente de ejecutarse en el repositorio remoto elegido. Los despliegues reales de aplicaciones continúan aplazados.
+
+## Versión 0.4
+
+- **Equipos:** invitaciones dentro de la plataforma, roles administrador/editor/lector y aplicaciones compartidas.
+- **Calidad:** documentación, enlaces HTTPS, ruta de health check declarada, dependencias sin ciclos y checklist de preparación.
+- **Operación:** métricas reales de Mini Fury, salud de PostgreSQL, alertas persistentes con reconocimiento y exportación Prometheus protegida para administradores.
+
+La ruta de salud del catálogo es configuración; todavía no se consulta la salud de las aplicaciones. Las métricas se calculan por instancia de Mini Fury. Las invitaciones no envían correo.
+
+Guía de arquitectura, rutas y límites: [docs/operacion-v0.4.md](docs/operacion-v0.4.md). Evidencia de pruebas: [docs/validacion-v0.4.md](docs/validacion-v0.4.md).
+
+```sh
+sh scripts/load-test.sh
+```
+
+La prueba usa API y PostgreSQL desechables sin puertos públicos ni datos principales. El informe queda en `.local/perf/catalog-summary.json`.
