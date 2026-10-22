@@ -1,0 +1,13 @@
+ALTER TABLE applications ADD COLUMN description TEXT NOT NULL DEFAULT '' CHECK(length(description)<=2000);
+ALTER TABLE applications ADD COLUMN tags JSONB NOT NULL DEFAULT '[]'::jsonb CHECK(jsonb_typeof(tags)='array' AND jsonb_array_length(tags)<=10);
+ALTER TABLE applications ADD COLUMN archived_at TIMESTAMPTZ;
+ALTER TABLE applications ADD COLUMN updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE applications ADD COLUMN version BIGINT NOT NULL DEFAULT 1 CHECK(version>0);
+ALTER TABLE applications ADD COLUMN search_document TSVECTOR GENERATED ALWAYS AS (to_tsvector('simple', name || ' ' || description || ' ' || owner || ' ' || runtime)) STORED;
+CREATE INDEX applications_search_idx ON applications USING GIN(search_document);
+CREATE INDEX applications_tags_idx ON applications USING GIN(tags);
+CREATE INDEX applications_state_idx ON applications(environment,archived_at,created_at DESC,id);
+ALTER TABLE users ADD COLUMN credential_version BIGINT NOT NULL DEFAULT 1;
+CREATE INDEX audit_actor_date_idx ON audit_events(actor_email,created_at DESC,id DESC);
+CREATE INDEX audit_action_date_idx ON audit_events(action,created_at DESC,id DESC);
+CREATE INDEX audit_resource_date_idx ON audit_events(resource_id,created_at DESC,id DESC);

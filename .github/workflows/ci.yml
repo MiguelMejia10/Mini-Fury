@@ -1,0 +1,53 @@
+name: Verify Mini Fury
+on: [push, pull_request]
+permissions:
+  contents: read
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: mini_fury
+          POSTGRES_DB: mini_fury_ci
+          POSTGRES_PASSWORD: ci_disposable_only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U mini_fury -d mini_fury_ci"
+          --health-interval 3s --health-timeout 3s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgres://mini_fury:ci_disposable_only@127.0.0.1:5432/mini_fury_ci?sslmode=disable
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.25'
+          cache-dependency-path: platform-api/go.sum
+      - run: sh scripts/ci-backend.sh
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: sh scripts/ci-frontend.sh
+  backup-tool:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - run: python3 -m unittest discover -s scripts -p 'test_*.py'

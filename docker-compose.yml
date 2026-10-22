@@ -1,0 +1,55 @@
+name: mini-operador-ti
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: mini_fury
+      POSTGRES_DB: mini_fury
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Copia .env.example a .env y configura POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mini_fury -d mini_fury"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  platform-api:
+    build: ./platform-api
+    environment:
+      DATABASE_URL: postgres://mini_fury:${POSTGRES_PASSWORD}@postgres:5432/mini_fury?sslmode=disable
+      HTTP_ADDR: 0.0.0.0:8080
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://127.0.0.1:5173,http://localhost:5173}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      DB_MAX_CONNECTIONS: ${DB_MAX_CONNECTIONS:-10}
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+  user-bootstrap:
+    profiles: [setup]
+    build: ./platform-api
+    entrypoint: ["platform-user"]
+    environment:
+      DATABASE_URL: postgres://mini_fury:${POSTGRES_PASSWORD}@postgres:5432/mini_fury?sslmode=disable
+    env_file:
+      - path: .local/bootstrap.env
+        required: false
+    depends_on:
+      postgres:
+        condition: service_healthy
+  test:
+    profiles: [test]
+    build:
+      context: ./platform-api
+      target: build
+    environment:
+      TEST_DATABASE_URL: postgres://mini_fury:${POSTGRES_PASSWORD}@postgres:5432/mini_fury?sslmode=disable
+    command: ["go", "test", "-count=1", "-v", "./..."]
+    depends_on:
+      postgres:
+        condition: service_healthy
+volumes:
+  postgres_data:
