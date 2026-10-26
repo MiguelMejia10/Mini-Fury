@@ -5,7 +5,7 @@ RUN go mod download
 COPY . .
 RUN go test ./... && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /platform-api ./cmd/server && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /platform-user ./cmd/user
 FROM alpine:3.22
-RUN apk add --no-cache ca-certificates && adduser -D -u 10001 platform
+RUN apk add --no-cache ca-certificates && adduser -D -u 10001 platform && mkdir -p /var/log/mini-fury && chown platform:platform /var/log/mini-fury
 COPY --from=build /platform-api /usr/local/bin/platform-api
 COPY --from=build /platform-user /usr/local/bin/platform-user
 USER platform

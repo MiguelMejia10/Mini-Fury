@@ -1,6 +1,6 @@
 # mini-operador-TI / Mini Fury
 
-Internal Developer Platform con interfaz React + TypeScript y API en Go. El catálogo permite registrar, listar y consultar aplicaciones reales persistidas en PostgreSQL, con sesión, roles y auditoría. Incluye equipos, documentación y dependencias del catálogo, y operación real de Mini Fury. Infraestructura y despliegues siguen usando demostraciones.
+Internal Developer Platform con interfaz React + TypeScript y API en Go. El catálogo permite registrar, listar y consultar aplicaciones reales persistidas en PostgreSQL, con sesión, roles y auditoría. Incluye equipos, documentación y dependencias del catálogo, y operación real de Mini Fury. Incluye scopes, operación Kubernetes, versiones, configuración y trabajos. El flujo completo se valida con una aplicación en un laboratorio Kubernetes aislado; las conexiones de aplicaciones propias se configuran explícitamente.
 
 ## Ejecutar en desarrollo local
 
@@ -21,9 +21,9 @@ npm install
 npm run dev -- --port 5173
 ```
 
-Abre http://127.0.0.1:5173/#applications y pulsa **Nueva aplicación**. Puedes usar una URL de repositorio de ejemplo: todavía no se comprueba acceso a Git ni se ejecutan builds. Selecciona el ambiente correspondiente para consultar sus aplicaciones.
+Abre http://127.0.0.1:5173/#applications y pulsa **Nueva aplicación**. Puedes usar una URL de repositorio de ejemplo: el acceso y los builds de un repositorio propio requieren configurar su integración. Selecciona el ambiente correspondiente para consultar sus aplicaciones.
 
-El catálogo empieza vacío. Las aplicaciones guardan nombre, URL HTTPS del repositorio sin credenciales, puerto HTTP, ambiente, responsable y runtime. El nombre es único por ambiente. Una aplicación registrada aparece **sin desplegar**, sin métricas ni réplicas inventadas. El detalle consulta nuevamente la API por ID. Tema y ambiente se conservan en el navegador.
+El catálogo empieza vacío. Las aplicaciones guardan nombre, URL HTTPS del repositorio sin credenciales, puerto HTTP, ambiente, responsable y runtime. El nombre es único por ambiente. El catálogo distingue el registro de la aplicación del estado real de sus scopes. El detalle consulta nuevamente la API por ID. Tema y ambiente se conservan en el navegador.
 
 La API se publica solo en `127.0.0.1:8080`. PostgreSQL no publica puertos al host. Vite redirige `/api` al backend; no hay que configurar CORS. Este entorno usa autenticación y autorización. Sigue configurado solo para desarrollo local HTTP; antes de publicar hay que configurar HTTPS, COOKIE_SECURE=true y los dominios autorizados.
 
@@ -47,7 +47,7 @@ El comando solo crea al primer administrador si la tabla de usuarios está vací
 
 Entra desde la pantalla de login. En **Configuración** puedes cerrar sesión; el administrador además puede crear usuarios y consultar auditoría. Un desarrollador ve sus aplicaciones personales y las compartidas con sus equipos; los permisos de escritura dependen del rol en el equipo. Los registros anteriores al control de acceso quedan visibles únicamente para administradores.
 
-La creación de usuarios requiere al menos 12 caracteres y un máximo de 128 bytes en la contraseña. El cambio de contraseña propia está en Configuración. La recuperación por correo y MFA siguen pendientes.
+La creación de usuarios requiere al menos 12 caracteres y un máximo de 128 bytes en la contraseña. El cambio de contraseña propia está en Configuración. La recuperación está disponible desde v0.5; el correo externo necesita configuración. MFA sigue pendiente.
 
 ## API
 
@@ -124,7 +124,7 @@ Con Go 1.25+ instalado también puedes ejecutar `go test ./...` y `go vet ./...`
 - `readme-Interfaz.md`: guía visual.
 - `readmeImplementacion.md`: checklist del MVP y avances.
 
-Pendiente: recuperación de contraseña por correo, MFA/SSO, validar capacidad con tráfico representativo de producción, CI/CD de aplicaciones, despliegues, secretos e integraciones con Kubernetes, GitLab, ArgoCD y observabilidad. El registro no construye imágenes ni crea infraestructura.
+Pendiente: activar correo externo de recuperación, MFA/SSO, validar capacidad con tráfico representativo de producción, CI/CD de aplicaciones, despliegues, secretos e integraciones con Kubernetes, GitLab, ArgoCD y observabilidad. El registro no construye imágenes ni crea infraestructura.
 
 ## Arquitectura y capacidad
 
@@ -159,3 +159,34 @@ sh scripts/load-test.sh
 ```
 
 La prueba usa API y PostgreSQL desechables sin puertos públicos ni datos principales. El informe queda en `.local/perf/catalog-summary.json`.
+
+## Versión 0.5: operación histórica y preparación productiva
+
+Observabilidad incorpora logs históricos de Mini Fury en Loki, métricas en Prometheus y un dashboard Grafana. El login permite recuperar contraseña por correo con enlaces de un solo uso. Las alertas pueden entregarse mediante webhooks con cola cifrada y reintentos. Se incluyen una composición HTTPS independiente, respaldos cifrados compatibles con S3 y pruebas de carga mixtas.
+
+```sh
+python3 scripts/setup-operations.py
+docker compose -f docker-compose.yml -f compose.observability.yml up -d --build
+```
+
+Grafana local: http://127.0.0.1:3300 (usuario `admin`, contraseña privada independiente en `.local/grafana_password`). Correo local de pruebas: http://127.0.0.1:8025. Loki y Prometheus no publican puertos al host. La configuración inicial no envía correo ni alertas a Internet.
+
+La recuperación y entrega externa requieren proveedor SMTP y destino autorizados para su uso público. HTTPS público y respaldos fuera del equipo requieren dominio/DNS y bucket, todavía pendientes. Los logs de pods siguen necesitando conectar Kubernetes.
+
+- [Guía operativa v0.5](docs/operacion-v0.5.md): configuración, rutas, secretos, retención, producción y restauración.
+- [Validación v0.5](docs/validacion-v0.5.md): pruebas y resultados medidos.
+- [Roadmap y análisis público de Fury](docs/roadmap-fury.md): prioridades para ampliar la gestión DevOps.
+
+```sh
+python3 scripts/verify-observability.py --restart
+sh scripts/test-https.sh
+sh scripts/load-test.sh operations
+```
+
+## Operación Kubernetes v0.6
+
+Los primeros cinco puntos están implementados en orden. Instrucciones, entorno aislado, permisos y límites en [docs/operacion-v0.6.md](docs/operacion-v0.6.md). El laboratorio se abre en http://127.0.0.1:5174/#runtime; las integraciones remotas y los puntos 6–10 siguen pendientes.
+
+## Centro DevOps v0.7
+
+Puntos 6–10: incidentes, SLO instrumentados, plantillas Go/Node, servicios PostgreSQL/Redis de desarrollo y capacidad/costos estimados. Abre `#devops`. Guía: [operacion-v0.7](docs/operacion-v0.7.md), pruebas: [validacion-v0.7](docs/validacion-v0.7.md). El laboratorio mantiene separados los datos principales y no activa proveedores externos.

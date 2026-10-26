@@ -1,0 +1,7 @@
+# Merge after compose.production.yml + compose.backups.yml.
+# Database access stays private; the edge network allows authorized S3 egress.
+services:
+  backup:
+    networks: [private,edge]
+  backup-scheduler:
+    networks: [private,edge]

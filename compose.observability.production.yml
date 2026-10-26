@@ -1,0 +1,18 @@
+# Merge after compose.production.yml + compose.observability.yml.
+# Monitoring services share the private production network; Mailpit never starts by default here.
+services:
+  platform-api:
+    environment:
+      GRAFANA_PUBLIC_URL: ${GRAFANA_PUBLIC_URL:-}
+  log-init:
+    networks: [private]
+  loki:
+    networks: [private]
+  alloy:
+    networks: [private]
+  prometheus:
+    networks: [private]
+  grafana:
+    networks: [private,edge]
+  mailpit:
+    profiles: [development-mail]

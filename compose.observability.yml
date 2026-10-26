@@ -1,0 +1,71 @@
+# Merge with docker-compose.yml. All dashboards bind only to loopback; Loki/Prometheus remain private.
+services:
+  platform-api:
+    environment:
+      OPERATION_LOG_DIR: /var/log/mini-fury
+      LOKI_URL: http://loki:3100
+      PROMETHEUS_URL: http://prometheus:9090
+      GRAFANA_PUBLIC_URL: http://127.0.0.1:${GRAFANA_PORT:-3300}/d/mini-fury-operations
+    volumes:
+      - operation_logs:/var/log/mini-fury
+    depends_on:
+      log-init:
+        condition: service_completed_successfully
+  log-init:
+    image: alpine:3.22
+    command: ['sh','-c','chown 10001:10001 /logs && chmod 700 /logs']
+    volumes: [operation_logs:/logs]
+  loki:
+    image: grafana/loki:3.7.9
+    command: ['-config.file=/etc/loki/config.yml']
+    volumes:
+      - ./infra/observability/loki.yml:/etc/loki/config.yml:ro
+      - loki_data:/loki
+    restart: unless-stopped
+  alloy:
+    image: grafana/alloy:v1.21.2
+    command: ['run','--storage.path=/var/lib/alloy/data','/etc/alloy/config.alloy']
+    user: '0:0'
+    volumes:
+      - ./infra/observability/alloy.alloy:/etc/alloy/config.alloy:ro
+      - operation_logs:/logs:ro
+      - alloy_data:/var/lib/alloy/data
+    depends_on: [loki]
+    restart: unless-stopped
+  prometheus:
+    image: prom/prometheus:v3.15.1
+    command: ['--config.file=/etc/prometheus/prometheus.yml','--storage.tsdb.retention.time=7d','--storage.tsdb.retention.size=1GB','--storage.tsdb.path=/prometheus']
+    volumes:
+      - ./infra/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./${METRICS_TOKEN_FILE:-.local/metrics_token}:/run/secrets/metrics_token:ro
+      - prometheus_data:/prometheus
+    user: '0:0'
+    restart: unless-stopped
+  grafana:
+    image: grafana/grafana:13.2.4
+    ports: ['127.0.0.1:${GRAFANA_PORT:-3300}:3000']
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_password
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_AUTH_ANONYMOUS_ENABLED: 'false'
+      GF_ANALYTICS_REPORTING_ENABLED: 'false'
+      GF_ANALYTICS_CHECK_FOR_UPDATES: 'false'
+    volumes:
+      - ./${GRAFANA_PASSWORD_FILE:-.local/grafana_password}:/run/secrets/grafana_password:ro
+      - ./infra/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    user: '0:0'
+    depends_on: [loki,prometheus]
+    restart: unless-stopped
+  mailpit:
+    image: axllent/mailpit:v1.32.0
+    ports: ['127.0.0.1:8025:8025']
+    restart: unless-stopped
+volumes:
+  operation_logs:
+  loki_data:
+  alloy_data:
+  prometheus_data:
+  grafana_data:

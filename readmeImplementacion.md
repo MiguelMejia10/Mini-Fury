@@ -191,3 +191,70 @@ Los despliegues reales de aplicaciones se mantienen aplazados por decisión del 
 - [ ] Enviar invitaciones por correo mediante un proveedor configurado.
 
 La preparación del catálogo mide completitud documental, no disponibilidad. El monitoreo de aplicaciones desplegadas, sus logs, CPU y réplicas continúa pendiente junto con Kubernetes/ArgoCD. Detalles y validación en `docs/operacion-v0.4.md` y `docs/validacion-v0.4.md`.
+
+## Avance v0.5: históricos y preparación para producción
+
+- [x] Grafana, Loki, Alloy y Prometheus con almacenamiento persistente y retención acotada.
+- [x] Visor de logs de Mini Fury e histórico de métricas, con filtros y permisos de administrador.
+- [x] Logs saneados, sin cuerpos, tokens, cookies ni parámetros de URL.
+- [x] Identidad de servicio para scraping de métricas; no accesible por el proxy público.
+- [x] Cola cifrada y persistente para correo/webhooks, con reintentos y reclamación segura entre workers.
+- [x] Notificación configurable de transiciones de alertas y visibilidad de entregas pendientes/fallidas.
+- [x] Recuperación por correo con token de un solo uso, expiración, revocación de sesiones y auditoría.
+- [x] SMTP local Mailpit para comprobar entregas sin proveedores externos.
+- [x] Despliegue HTTPS separado con proxy confiable, CSP y cookies Secure.
+- [x] Ensayo HTTPS aislado con CA de prueba y comprobación de cookie Secure.
+- [x] Respaldos restic cifrados, retención, worker periódico y adaptador S3 configurable.
+- [x] Restauración real desde repositorio cifrado en base nueva y limpieza segura.
+- [x] Carga mixta con doce cuentas, 120 aplicaciones iniciales y hasta cincuenta usuarios virtuales.
+- [x] Roadmap de operación DevOps con fuentes primarias públicas de Fury.
+- [ ] Activar dominio/DNS, firewall y certificados públicos reales.
+- [ ] Activar SMTP de producción y validar entregabilidad al proveedor elegido.
+- [ ] Configurar un destino externo de alertas y comprobar recepción real.
+- [ ] Configurar bucket externo, credenciales limitadas e inmutabilidad; ensayar recuperación desde ese proveedor.
+- [ ] Definir RPO/RTO y vigilar fallos de respaldo desde un monitor externo.
+- [ ] Dimensionar con tráfico real, pruebas largas y degradación de dependencias.
+- [ ] Conectar Kubernetes para logs de pods, estado y operaciones de workloads.
+- [ ] Revisar visualmente las pantallas autenticadas con la cuenta del usuario (pendiente previo).
+
+No se marcaron como completados los proveedores externos inexistentes ni las funciones de aplicaciones desplegadas. Guías: `docs/operacion-v0.5.md`, `docs/validacion-v0.5.md` y `docs/roadmap-fury.md`.
+
+## Avance v0.6: primeros cinco puntos, en orden
+
+- [x] 1. Scopes por aplicación con ambiente, criticidad, recursos y permisos de producción.
+- [x] 2. Estado, pods, eventos, logs seleccionados, métricas, reinicio y escalado Kubernetes.
+- [x] 3. Builds locales reales, versiones por digest, despliegues y rollback de snapshots.
+- [x] 4. Configuración versionada y referencias permitidas a Secrets, sin exponer sus valores.
+- [x] 5. Cola persistente, progreso, cancelación, reintento, leases e idempotencia.
+- [x] Laboratorio separado del usuario/base principal y validación del flujo real.
+- [x] Pruebas PostgreSQL de permisos, firma del agente, reclamación concurrente y fencing de leases.
+- [x] Restauración que cancela trabajos pendientes y revoca leases para evitar replay.
+- [ ] Conectar repositorios propios y ejecutar pipelines remotos GitHub/GitLab.
+- [ ] Ingress/DNS/TLS de aplicaciones, GitOps/ArgoCD y políticas de red/cuotas de producción.
+- [ ] Prueba de carga representativa con operaciones Kubernetes y dimensionamiento.
+- [ ] Revisión visual autenticada completa.
+- [x] 6–10. Bloque local implementado en v0.7; alcance y pendientes detallados a continuación.
+
+La conexión Kubernetes pendiente de v0.5 queda resuelta en el laboratorio local. La activación de aplicaciones propias y proveedores externos sigue pendiente. Guía: `docs/operacion-v0.6.md`.
+
+## Avance v0.7: puntos 6–10, en orden
+
+- [x] 6. Incidentes por aplicación/scope: responsables, cronología, reconocimiento, silencio temporal, resolución, reapertura y escalamiento deduplicado.
+- [x] Cola cifrada de notificaciones de escalamiento y estado explícito cuando falta proveedor.
+- [x] 7. SLO de disponibilidad/latencia por scope, ventanas, deltas por pod, presupuesto de error y burn con señales reales.
+- [x] Ausencia de datos, resets y cobertura incompleta explícitos; incidentes de burn sin datos fabricados.
+- [x] 8. Plantillas Go/Node versionadas, registro atómico en catálogo y ZIP con pruebas, salud, contadores, Dockerfile, CI y manifiesto.
+- [x] Construcción real de ambas plantillas desde los archivos descargados.
+- [x] 9. Perfiles de desarrollo PostgreSQL/Redis, cuotas, plan/confirmación, trabajos persistentes y consulta de estado real.
+- [x] Suspensión/reanudación con PVC retenido y conservación de una fila SQL comprobada.
+- [x] 10. Recursos por aplicación/scope, consumo medido, tarifas configurables y presupuesto con estimaciones claramente identificadas.
+- [x] Pruebas PostgreSQL, concurrencia y detector de carreras; build TypeScript/Vite.
+- [x] Restauración que detiene escalamiento, deshabilita SLO e impide reanudar operaciones externas automáticamente.
+- [ ] Conectar proveedor de paging y rotaciones/calendario de guardias.
+- [ ] Adaptadores SLI para instrumentación ajena al protocolo local y política multiwindow completa de burn.
+- [ ] Automatizar creación/publicación de repositorios y pipelines remotos de las plantillas.
+- [ ] Respaldos/restauración externos de los servicios aprovisionados, TLS/red y alta disponibilidad antes de habilitar producción.
+- [ ] Integrar facturación real, costos compartidos y agregación financiera por organización/equipo.
+- [ ] Revisión visual autenticada completa y carga representativa de producción.
+
+Guía y límites: `docs/operacion-v0.7.md`. Evidencia: `docs/validacion-v0.7.md`.

@@ -1,0 +1,30 @@
+services:
+  backup:
+    profiles: [backups]
+    build:
+      context: .
+      dockerfile: infra/backup/Dockerfile
+    env_file: [.local/backup.env]
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Define the database password}
+    volumes: [backup_repository:/repository]
+    command: [backup]
+    depends_on:
+      postgres:
+        condition: service_healthy
+  backup-scheduler:
+    profiles: [backups]
+    build:
+      context: .
+      dockerfile: infra/backup/Dockerfile
+    env_file: [.local/backup.env]
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Define the database password}
+    volumes: [backup_repository:/repository]
+    command: [loop]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+volumes:
+  backup_repository:

@@ -62,6 +62,21 @@ def restore(path, target=None, keep=False):
             raise ValueError('El esquema restaurado no corresponde al proyecto.')
         if sql(database, "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='004_teams_quality_operations.sql')") == 't':
             counts.update({table: int(sql(database, 'SELECT count(*) FROM ' + table)) for table in COLLABORATION_TABLES})
+        production_schema = sql(database, "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='005_operations_production.sql')") == 't'
+        if production_schema:
+            counts.update({table: int(sql(database, 'SELECT count(*) FROM ' + table)) for table in ['password_resets', 'delivery_jobs', 'alert_transitions']})
+            # A restore must not revive recovery links or replay historical emails/webhooks.
+            sql(database, 'DELETE FROM password_resets; DELETE FROM delivery_jobs;')
+        runtime_schema = sql(database, "SELECT to_regclass('public.runtime_jobs') IS NOT NULL") == 't'
+        if runtime_schema:
+            counts.update({table: int(sql(database, 'SELECT count(*) FROM ' + table)) for table in ['runtime_scopes', 'runtime_versions', 'runtime_configurations', 'runtime_jobs', 'runtime_job_events']})
+            # A recovered queue must never replay deployments or trust pre-restore build leases.
+            sql(database, "WITH recovered AS (UPDATE runtime_jobs SET state='cancelled', phase='restore_cancelled', message='Operación detenida al restaurar el respaldo; requiere una nueva solicitud', cancel_requested=true, owner_token='', lease_until=NULL, completed_at=now() WHERE state IN ('queued','running') RETURNING id) INSERT INTO runtime_job_events(job_id,state,phase,message) SELECT id,'cancelled','restore_cancelled','El respaldo fue restaurado; no se ejecutó la operación pendiente' FROM recovered; UPDATE runtime_jobs SET owner_token='',lease_until=NULL WHERE owner_token<>'' OR lease_until IS NOT NULL;")
+        expansion_schema = sql(database, "SELECT to_regclass('public.scope_slos') IS NOT NULL") == 't'
+        if expansion_schema:
+            counts.update({table: int(sql(database, 'SELECT count(*) FROM ' + table)) for table in ['operational_incidents', 'incident_events', 'scope_slos', 'slo_measurements', 'application_scaffolds', 'managed_services', 'application_cost_policies']})
+            # Prevent replaying escalations and reusing counters from before the restore.
+            sql(database, "DELETE FROM slo_counter_state; UPDATE scope_slos SET enabled=false,version=version+1; UPDATE operational_incidents SET escalate_at=NULL,version=version+1 WHERE state<>'resolved'; UPDATE managed_services SET state='failed',version=version+1,updated_at=now();")
         # Restoring a backup must not revive previously revoked login sessions.
         sql(database, 'DELETE FROM sessions; DELETE FROM auth_attempts;')
         print(json.dumps({'database': database, 'verified': True, 'rows': counts, 'sessionsRevoked': True}, ensure_ascii=False))

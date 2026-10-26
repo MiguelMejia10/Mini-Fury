@@ -15,17 +15,22 @@ import (
 )
 
 type HTTP struct {
-	Service *Service
-	Log     *slog.Logger
-	Origins map[string]bool
-	Secure  bool
+	Service       *Service
+	Log           *slog.Logger
+	Origins       map[string]bool
+	Secure        bool
+	SessionCookie string
 }
 
 func (h *HTTP) cookieName() string {
-	if h.Secure {
-		return "__Host-mini_fury_session"
+	name := h.SessionCookie
+	if name == "" {
+		name = "mini_fury_session"
 	}
-	return "mini_fury_session"
+	if h.Secure {
+		return "__Host-" + name
+	}
+	return name
 }
 func respond(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

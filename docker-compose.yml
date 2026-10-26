@@ -16,6 +16,9 @@ services:
     restart: unless-stopped
   platform-api:
     build: ./platform-api
+    env_file:
+      - path: .local/runtime.env
+        required: false
     environment:
       DATABASE_URL: postgres://mini_fury:${POSTGRES_PASSWORD}@postgres:5432/mini_fury?sslmode=disable
       HTTP_ADDR: 0.0.0.0:8080

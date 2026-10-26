@@ -5,12 +5,17 @@ import (
 	"database/sql"
 	"errors"
 	"log/slog"
+	"mini-operador-ti/platform-api/internal/delivery"
 	"mini-operador-ti/platform-api/internal/identity"
+	"mini-operador-ti/platform-api/internal/recovery"
+	operating "mini-operador-ti/platform-api/internal/runtime"
 	"mini-operador-ti/platform-api/internal/teams"
 	"mini-operador-ti/platform-api/internal/telemetry"
+	"mini-operador-ti/platform-api/internal/transport"
 	"net/http"
 	"os"
 	"os/signal"
+	"regexp"
 	"strconv"
 	"syscall"
 	"time"
@@ -77,7 +82,11 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	auth := &identity.HTTP{Service: service, Log: logger, Origins: origins, Secure: os.Getenv("COOKIE_SECURE") != "false"}
+	cookieName := os.Getenv("SESSION_COOKIE_NAME")
+	if cookieName != "" && !regexp.MustCompile(`^[a-zA-Z0-9_]{1,40}$`).MatchString(cookieName) {
+		return errors.New("invalid session cookie name")
+	}
+	auth := &identity.HTTP{SessionCookie: cookieName, Service: service, Log: logger, Origins: origins, Secure: os.Getenv("COOKIE_SECURE") != "false"}
 	go func() {
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
@@ -99,10 +108,53 @@ func run(logger *slog.Logger) error {
 	if instance == "" {
 		instance, _ = os.Hostname()
 	}
-	ops := &telemetry.HTTP{DB: db, Metrics: metrics, Instance: instance, Auth: auth}
+	var queue *delivery.Queue
+	smtpAddress := os.Getenv("SMTP_ADDRESS")
+	webhookURL := os.Getenv("ALERT_WEBHOOK_URL")
+	if smtpAddress != "" || webhookURL != "" {
+		sender, e := delivery.NewSender(delivery.Config{SMTPAddress: smtpAddress, SMTPUser: os.Getenv("SMTP_USER"), SMTPPassword: os.Getenv("SMTP_PASSWORD"), From: os.Getenv("SMTP_FROM"), LocalSMTP: os.Getenv("SMTP_ALLOW_LOCAL") == "true", WebhookURL: webhookURL, WebhookSecret: os.Getenv("ALERT_WEBHOOK_SECRET"), LocalWebhook: os.Getenv("WEBHOOK_ALLOW_LOCAL") == "true"})
+		if e != nil {
+			return e
+		}
+		queue, e = delivery.New(db, os.Getenv("DELIVERY_KEY"), sender)
+		if e != nil {
+			return e
+		}
+		go queue.Run(root, func(error) { logger.Error("delivery_queue_failed") })
+	}
+	recoveryHTTP, err := recovery.New(db, queue, os.Getenv("APP_PUBLIC_URL"), origins, smtpAddress != "")
+	if err != nil {
+		return err
+	}
+	history := &telemetry.History{LokiURL: os.Getenv("LOKI_URL"), PrometheusURL: os.Getenv("PROMETHEUS_URL"), GrafanaURL: os.Getenv("GRAFANA_PUBLIC_URL")}
+	ops := &telemetry.HTTP{DB: db, Metrics: metrics, Instance: instance, Auth: auth, History: history, MetricsToken: os.Getenv("METRICS_TOKEN"), Queue: queue, WebhookEnabled: webhookURL != ""}
+	if directory := os.Getenv("OPERATION_LOG_DIR"); directory != "" {
+		file, e := telemetry.NewLogFile(directory, instance)
+		if e != nil {
+			return e
+		}
+		defer file.Close()
+		metrics.Record = func(method, path string, status int, d time.Duration) {
+			if e := file.Record(method, path, status, d); e != nil {
+				logger.Error("operation_log_write_failed")
+			}
+		}
+	}
+
 	go ops.Run(root, func(e error) { logger.Error("alert_evaluation_failed", "error", e) })
-	api := &platform.API{Store: &platform.PostgresStore{DB: db}, Log: logger, Auth: auth, Teams: &teams.HTTP{Repo: &teams.Postgres{DB: db}, Auth: auth}, Operations: ops}
-	server := &http.Server{Addr: addr, Handler: metrics.Wrap(api.Handler()), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 * 1024}
+	runtimeConfig, err := operating.LoadConfig(os.Getenv("RUNTIME_CONNECTIONS_FILE"))
+	if err != nil {
+		return err
+	}
+	runtimeHTTP := &operating.HTTP{DB: db, Auth: auth, Config: runtimeConfig, Queue: queue, WebhookEnabled: webhookURL != ""}
+	go runtimeHTTP.RunExpansion(root, func(error) { logger.Error("expansion_evaluation_failed") })
+	runtimeHTTP.Run(root, func(error) { logger.Error("runtime_worker_failed") })
+	api := &platform.API{Store: &platform.PostgresStore{DB: db}, Log: logger, Auth: auth, Teams: &teams.HTTP{Repo: &teams.Postgres{DB: db}, Auth: auth}, Operations: ops, Recovery: recoveryHTTP, Runtime: runtimeHTTP}
+	handler, err := transport.Proxy(os.Getenv("TRUSTED_PROXY_CIDRS"), metrics.Wrap(api.Handler()))
+	if err != nil {
+		return err
+	}
+	server := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 * 1024}
 	done := make(chan error, 1)
 	go func() { logger.Info("server_started", "address", addr); done <- server.ListenAndServe() }()
 	select {

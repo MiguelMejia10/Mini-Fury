@@ -1,0 +1,54 @@
+name: mini-fury-runtime-lab
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: mini_fury
+      POSTGRES_USER: mini_fury
+      POSTGRES_PASSWORD: disposable_runtime_lab_only
+    volumes: [lab_database:/var/lib/postgresql/data]
+    healthcheck:
+      test: ['CMD-SHELL','pg_isready -U mini_fury -d mini_fury']
+      interval: 2s
+      retries: 30
+  credentials:
+    image: alpine:3.22
+    volumes:
+      - ./.local/kube-lab/test:/source:ro
+      - lab_credentials:/target
+    command: ['sh','-c','cp /source/ca.crt /source/token /source/agent-token /source/connections.json /target/ && chown -R 10001:10001 /target && chmod 700 /target && chmod 600 /target/*']
+  platform-api:
+    build: ./platform-api
+    environment:
+      DATABASE_URL: postgres://mini_fury:disposable_runtime_lab_only@postgres:5432/mini_fury?sslmode=disable
+      HTTP_ADDR: 0.0.0.0:8080
+      COOKIE_SECURE: 'false'
+      SESSION_COOKIE_NAME: mini_fury_lab_session
+      ALLOWED_ORIGINS: http://127.0.0.1:5174
+      RUNTIME_CONNECTIONS_FILE: /run/mini-fury-runtime/connections.json
+      INSTANCE_ID: runtime-lab
+    ports: ['127.0.0.1:18080:8080']
+    volumes: [lab_credentials:/run/mini-fury-runtime:ro]
+    networks: [default,kind]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      credentials:
+        condition: service_completed_successfully
+  user-bootstrap:
+    profiles: [setup]
+    build: ./platform-api
+    entrypoint: [platform-user]
+    env_file: [.local/kube-lab/test/account.env]
+    environment:
+      DATABASE_URL: postgres://mini_fury:disposable_runtime_lab_only@postgres:5432/mini_fury?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+networks:
+  kind:
+    external: true
+    name: kind
+volumes:
+  lab_database:
+  lab_credentials:

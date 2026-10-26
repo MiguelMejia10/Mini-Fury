@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
+	"mini-operador-ti/platform-api/internal/delivery"
 	"mini-operador-ti/platform-api/internal/identity"
 	"net/http"
 	"regexp"
@@ -11,10 +13,14 @@ import (
 )
 
 type HTTP struct {
-	DB       *sql.DB
-	Metrics  *Metrics
-	Instance string
-	Auth     *identity.HTTP
+	DB             *sql.DB
+	Metrics        *Metrics
+	Instance       string
+	Auth           *identity.HTTP
+	History        *History
+	MetricsToken   string
+	Queue          *delivery.Queue
+	WebhookEnabled bool
 }
 type Alert struct {
 	Stale          bool       `json:"stale"`
@@ -45,6 +51,10 @@ func (h *HTTP) admin(fn http.HandlerFunc) http.Handler {
 	}))
 }
 func (h *HTTP) Routes(m *http.ServeMux) {
+	m.Handle("GET /api/operations/logs", h.admin(h.logs))
+	m.Handle("GET /api/operations/history", h.admin(h.history))
+	m.Handle("GET /api/operations/integrations", h.admin(h.integrations))
+	m.HandleFunc("GET /internal/metrics", h.internalMetrics)
 	m.Handle("GET /api/operations/status", h.admin(h.status))
 	m.Handle("GET /api/operations/alerts", h.admin(h.alerts))
 	m.Handle("POST /api/operations/alerts/{id}/ack", h.admin(h.ack))
@@ -143,6 +153,9 @@ func (h *HTTP) ack(w http.ResponseWriter, r *http.Request) {
 }
 func (h *HTTP) Evaluate(ctx context.Context) error {
 	s := h.snapshot(ctx)
+	if s.Requests < 20 {
+		return h.enqueueTransitions(ctx)
+	}
 	rules := []struct {
 		name, severity, message string
 		active                  bool
@@ -153,7 +166,7 @@ func (h *HTTP) Evaluate(ctx context.Context) error {
 			return e
 		}
 	}
-	return nil
+	return h.enqueueTransitions(ctx)
 }
 func (h *HTTP) Run(ctx context.Context, onError func(error)) {
 	ticker := time.NewTicker(10 * time.Second)
@@ -171,4 +184,50 @@ func (h *HTTP) Run(ctx context.Context, onError func(error)) {
 		case <-ticker.C:
 		}
 	}
+}
+
+// The database trigger records transitions in the same transaction as each alert change.
+// Enqueuing in a separate short transaction is restart-safe via the unique transition ID.
+func (h *HTTP) enqueueTransitions(ctx context.Context) error {
+	if h.Queue == nil || !h.WebhookEnabled {
+		return nil
+	}
+	tx, e := h.DB.BeginTx(ctx, nil)
+	if e != nil {
+		return e
+	}
+	defer tx.Rollback()
+	rows, e := tx.QueryContext(ctx, `SELECT t.id::text,a.id::text,a.instance,a.rule,a.message,t.active FROM alert_transitions t JOIN platform_alerts a ON a.id=t.alert_id WHERE t.created_at>now()-interval '24 hours' AND NOT EXISTS(SELECT 1 FROM delivery_jobs j WHERE j.dedupe_key='alert:'||t.id::text) ORDER BY t.created_at LIMIT 50 FOR UPDATE OF t SKIP LOCKED`)
+	if e != nil {
+		return e
+	}
+	type transition struct {
+		id, alert, instance, rule, message string
+		active                             bool
+	}
+	items := []transition{}
+	for rows.Next() {
+		var v transition
+		if e = rows.Scan(&v.id, &v.alert, &v.instance, &v.rule, &v.message, &v.active); e != nil {
+			rows.Close()
+			return e
+		}
+		items = append(items, v)
+	}
+	e = rows.Err()
+	rows.Close()
+	if e != nil {
+		return e
+	}
+	for _, v := range items {
+		state := "resolved"
+		if v.active {
+			state = "firing"
+		}
+		m := delivery.Message{ID: v.id, Event: state, Text: fmt.Sprintf("Mini Fury [%s] %s / %s: %s", state, v.instance, v.rule, v.message)}
+		if e = h.Queue.Enqueue(ctx, tx, "alert:"+v.id, "webhook", m, time.Now().Add(24*time.Hour)); e != nil {
+			return e
+		}
+	}
+	return tx.Commit()
 }

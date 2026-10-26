@@ -1,0 +1,23 @@
+# Merge with the development composition only. The laboratory uses a separate kind cluster.
+services:
+  runtime-credentials-init:
+    image: alpine:3.22
+    volumes:
+      - ./.local/kube-lab/${RUNTIME_LAB_TARGET:-main}:/source:ro
+      - runtime_credentials:/target
+    command: ['sh','-c','cp /source/ca.crt /source/token /source/agent-token /source/connections.json /target/ && chown -R 10001:10001 /target && chmod 700 /target && chmod 600 /target/*']
+  platform-api:
+    environment:
+      RUNTIME_CONNECTIONS_FILE: /run/mini-fury-runtime/connections.json
+    volumes:
+      - runtime_credentials:/run/mini-fury-runtime:ro
+    networks: [default,kind]
+    depends_on:
+      runtime-credentials-init:
+        condition: service_completed_successfully
+networks:
+  kind:
+    external: true
+    name: kind
+volumes:
+  runtime_credentials:

@@ -1,0 +1,9 @@
+apiVersion: 1
+providers:
+  - name: Mini Fury
+    folder: Mini Fury
+    type: file
+    disableDeletion: true
+    editable: false
+    options:
+      path: /var/lib/grafana/dashboards

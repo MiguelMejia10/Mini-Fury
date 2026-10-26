@@ -20,6 +20,8 @@ type API struct {
 	Auth       *identity.HTTP
 	Teams      *teams.HTTP
 	Operations *telemetry.HTTP
+	Recovery   interface{ Routes(*http.ServeMux) }
+	Runtime    interface{ Routes(*http.ServeMux) }
 }
 type apiError struct {
 	Code    string            `json:"code,omitempty"`
@@ -61,6 +63,12 @@ func (a *API) Handler() http.Handler {
 	if a.Operations != nil {
 		a.Operations.Routes(mux)
 	}
+	if a.Recovery != nil {
+		a.Recovery.Routes(mux)
+	}
+	if a.Runtime != nil {
+		a.Runtime.Routes(mux)
+	}
 	slots := make(chan struct{}, 64)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { fail(w, http.StatusNotFound, "Ruta no encontrada.") })
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -78,8 +86,9 @@ func (a *API) Handler() http.Handler {
 		start := time.Now()
 		ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
 		defer cancel()
-		mux.ServeHTTP(w, r.WithContext(ctx))
-		a.Log.Info("http_request", "method", r.Method, "path", r.URL.Path, "duration_ms", time.Since(start).Milliseconds())
+		scoped := r.WithContext(ctx)
+		mux.ServeHTTP(w, scoped)
+		a.Log.Info("http_request", "method", r.Method, "route", safeRoute(scoped.Pattern), "duration_ms", time.Since(start).Milliseconds())
 	})
 }
 func (a *API) internal(w http.ResponseWriter, err error) {
@@ -260,4 +269,11 @@ func (a *API) setArchived(w http.ResponseWriter, r *http.Request, archived bool)
 		return
 	}
 	send(w, 200, app)
+}
+
+func safeRoute(pattern string) string {
+	if pattern == "" || pattern == "/" {
+		return "unmatched"
+	}
+	return pattern
 }

@@ -1,0 +1,2 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {createServer} from './server.mjs';
+test('health and measured counters',async()=>{const server=createServer();await new Promise(r=>server.listen(0,'127.0.0.1',r));try{const base='http://127.0.0.1:'+server.address().port;assert.equal((await fetch(base+'/health')).status,200);await fetch(base+'/');await fetch(base+'/error');const c=await(await fetch(base+'/mini-fury/metrics')).json();assert.equal(c.total,2);assert.equal(c.errors,1)}finally{await new Promise(r=>server.close(r))}});

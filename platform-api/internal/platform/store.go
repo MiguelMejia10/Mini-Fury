@@ -128,6 +128,12 @@ func (s *PostgresStore) Search(ctx context.Context, f Filter, limit, offset int)
 	return result, nil
 }
 func (s *PostgresStore) Create(ctx context.Context, in CreateApplication) (Application, error) {
+	return s.create(ctx, in, "", "")
+}
+func (s *PostgresStore) CreateFromTemplate(ctx context.Context, in CreateApplication, id, version string) (Application, error) {
+	return s.create(ctx, in, id, version)
+}
+func (s *PostgresStore) create(ctx context.Context, in CreateApplication, templateID, templateVersion string) (Application, error) {
 	u, ok := identity.CurrentUser(ctx)
 	if !ok {
 		return Application{}, identity.ErrUnauthorized
@@ -169,6 +175,11 @@ func (s *PostgresStore) Create(ctx context.Context, in CreateApplication) (Appli
 	}
 	if err != nil {
 		return Application{}, err
+	}
+	if templateID != "" {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO application_scaffolds(application_id,template_id,template_version,created_by)VALUES($1,$2,$3,$4)`, a.ID, templateID, templateVersion, u.ID); err != nil {
+			return Application{}, err
+		}
 	}
 	if err = dependencies(ctx, tx, u, a.ID, in.DependencyIDs); err != nil {
 		return Application{}, err

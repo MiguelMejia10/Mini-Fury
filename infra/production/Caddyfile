@@ -1,0 +1,26 @@
+{$SITE_ADDRESS} {
+ {$TLS_DIRECTIVE:}
+ encode zstd gzip
+ header {
+  Strict-Transport-Security "max-age=31536000"
+  X-Content-Type-Options nosniff
+  X-Frame-Options DENY
+  Referrer-Policy no-referrer
+  Permissions-Policy "camera=(), microphone=(), geolocation=()"
+  Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+ }
+ handle /internal/* {
+  respond 404
+ }
+ handle /api/* {
+  reverse_proxy platform-api:8080 {
+   header_up X-Real-IP {remote_host}
+  }
+ }
+ handle {
+  root * /srv
+  try_files {path} /index.html
+  file_server
+ }
+ # No access logging of URLs: recovery links stay in fragments, not request paths.
+}

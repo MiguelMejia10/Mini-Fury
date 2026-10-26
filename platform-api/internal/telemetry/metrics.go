@@ -27,6 +27,7 @@ type Metrics struct {
 	latency       [13]uint64
 	sum           float64
 	active        atomic.Int64
+	Record        func(string, string, int, time.Duration)
 }
 type Snapshot struct {
 	Instance          string    `json:"instance"`
@@ -147,7 +148,7 @@ func (w *response) Write(b []byte) (int, error) {
 }
 func (m *Metrics) Wrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if len(r.URL.Path) >= 15 && r.URL.Path[:15] == "/api/operations" {
+		if (len(r.URL.Path) >= 15 && r.URL.Path[:15] == "/api/operations") || r.URL.Path == "/internal/metrics" {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -165,6 +166,9 @@ func (m *Metrics) Wrap(next http.Handler) http.Handler {
 				panic(p)
 			}
 			m.Observe(time.Now(), status, time.Since(start))
+			if m.Record != nil {
+				m.Record(r.Method, r.URL.Path, status, time.Since(start))
+			}
 		}()
 		next.ServeHTTP(record, r)
 	})

@@ -242,6 +242,9 @@ func TestTeamsQualityAndOperations(t *testing.T) {
 		t.Fatalf("concurrent last administrators: %d %d", a, b)
 	}
 	expect(call("GET", "/api/operations/status", nil, sessions[3]), 403)
+	expect(call("GET", "/api/operations/logs", nil, sessions[3]), 403)
+	expect(call("GET", "/api/operations/history", nil, sessions[3]), 403)
+	expect(call("GET", "/api/operations/integrations", nil, sessions[3]), 403)
 	w = call("GET", "/api/operations/status", nil, sessions[0])
 	expect(w, 200)
 	if !strings.Contains(w.Body.String(), "databaseHealthy") {
@@ -268,6 +271,9 @@ func TestTeamsQualityAndOperations(t *testing.T) {
 	expect(call("POST", "/api/operations/alerts/"+id+"/ack", map[string]string{}, sessions[0]), 409)
 	// Recovery retains history; a new incident clears acknowledgment and increments occurrences.
 	ops.Metrics = telemetry.New()
+	for range 30 {
+		ops.Metrics.Observe(time.Now(), 200, time.Millisecond)
+	}
 	if e = ops.Evaluate(ctx); e != nil {
 		t.Fatal(e)
 	}

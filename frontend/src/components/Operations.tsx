@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { request } from "../services/http";
+import { OperationHistory } from "./OperationHistory";
 import { useAuth } from "./Auth";
 interface Snapshot {
   instance: string;
@@ -112,6 +113,7 @@ export function Operations() {
     );
   return (
     <>
+      <OperationHistory />
       {error && (
         <div role="alert" className="form-message bad">
           {error} Los valores previos pueden estar desactualizados.
